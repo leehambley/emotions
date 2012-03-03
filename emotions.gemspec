@@ -2,6 +2,7 @@
 require File.expand_path('../lib/emotions/version', __FILE__)
 
 Gem::Specification.new do |gem|
+
   gem.authors       = ["Lee Hambley"]
   gem.email         = ["lee.hambley@gmail.com"]
   gem.description   = %q{TODO: Write a gem description}
@@ -14,4 +15,10 @@ Gem::Specification.new do |gem|
   gem.name          = "emotions"
   gem.require_paths = ["lib"]
   gem.version       = Emotions::VERSION
+
+  gem.add_dependency('redis')
+
+  gem.add_development_dependency('minitest')
+  gem.add_development_dependency('daemon_controller')
+
 end
