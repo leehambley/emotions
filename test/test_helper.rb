@@ -12,16 +12,13 @@ require 'minitest/unit'
 require 'minitest/spec'
 require 'minitest/autorun'
 
+require 'turn'
+
 require_relative '../lib/emotions'
 
-ExampleObject             = Class.new
-ExampleTarget             = Class.new
-ExampleUnNamespacedObject = Class.new
-
-module Namespace
-
-  ExampleObject = Class.new
-
+Turn.config do |tc|
+  tc.ansi   = true
+  tc.format = :dot
 end
 
 IntegrationTestRedis = DaemonController.new(
@@ -35,33 +32,64 @@ IntegrationTestRedis = DaemonController.new(
 
 module Emotions
 
-  module Test
+  module MiniTest
     
     class Unit
-      TestCase = Class.new(MiniTest::Unit::TestCase)
+      TestCase = Class.new(::MiniTest::Unit::TestCase)
     end
 
     class Acceptance
-      TestCase = Class.new(MiniTest::Unit::TestCase)
+      TestCase = Class.new(Unit::TestCase)
     end
 
     class Integration
-      TestCase = Class.new(MiniTest::Unit::TestCase)
+      TestCase = Class.new(Acceptance::TestCase)
     end
 
-  end
-
-  Test::Integration::TestCase.add_setup_hook do
-    ::IntegrationTestRedis.start
-    rb = RedisBackend.new
-    rb.redis = Redis.new(port: 9737)
-    rb.redis.flushdb
-    Emotions.backend = rb
-  end
-
-  Test::Integration::TestCase.add_teardown_hook do
-    ::IntegrationTestRedis.stop
   end
 
 end
 
+Emotions::MiniTest::Unit::TestCase.class_eval do
+
+  def setup_with_clean_objects
+    setup_without_clean_objects
+    Object.const_set(:ExampleObject, Class.new)
+    ::ExampleObject.class_eval { attr_accessor :id }
+    Object.const_set(:ExampleTarget, Class.new)
+    ::ExampleTarget.class_eval { attr_accessor :id }
+  end
+  alias :setup_without_clean_objects :setup
+  alias :setup :setup_with_clean_objects
+
+  def teardown_with_clean_objects
+    teardown_without_clean_objects
+    Object.send(:remove_const, :ExampleObject)
+    Object.send(:remove_const, :ExampleTarget)
+  end
+  alias :teardown_without_clean_objects :teardown
+  alias :teardown :teardown_with_clean_objects
+
+end
+
+Emotions::MiniTest::Integration::TestCase.class_eval do
+
+  def setup_with_live_redis
+    setup_without_live_redis
+    ::IntegrationTestRedis.start
+    rb = Emotions::RedisBackend.new
+    rb.redis = ::Redis.new(port: 9737)
+    rb.redis.flushdb
+    Emotions.backend = rb
+  end
+  alias :setup_without_live_redis :setup
+  alias :setup :setup_with_live_redis
+
+  def teardown_with_live_redis
+    teardown_without_live_redis
+    ::IntegrationTestRedis.stop
+  end
+  alias :teardown_without_live_redis :teardown
+  alias :teardown :teardown_with_live_redis
+
+end

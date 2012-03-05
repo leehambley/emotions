@@ -118,28 +118,42 @@ TODO: Write usage instructions here
 4. Push to the branch (`git push origin my-new-feature`)
 5. Create new Pull Request
 
-## Example Redis Session
+
+## Sample Key Structure
+
+Given the following example, the key 
+structure would be:
 
 ``` ruby
-
-object_class:emotion:object_id:target_class:target_id
-target_class:emotion:target_id:object_class:object_id
-
-class User
-  def emotion(emotion, target)
-    Emotion.new({object: self, target: target, emotion: emotion})
-  end
+class Recommendation
+  iclude Emotions::Emotive
+  emotions :like
 end
 
-User.new(id: 123).like?(Show.new(id: 456))
-=> user:123:like:show:456
+class User
+  include Emotions::Emotional
+end
 
-Show.new(id: 456).like_exists?(User.new(id: 123)
-=> show:456:like_by:user:123
+User.find(123).like(Recommendation.find(789)
+User.find(123).like(Recommendation.find(987)
 
-User.new(id: 123).all_with_emotion(:like)
-=> KEYS user:123:like*
+User.find(321).like(Recommendation.find(789)
+```
 
-User.new(id: 123).count_with_emotion(:like)
-=> KEYS user:123:like*
+The resulting Redis structure would be something like this:
+
+``` text
+user:like:123:recommendation
+  "789" "2012-11-13 00:01:02 +01:00"
+  "987" "2011-02-01 00:03:01 +01:00"
+
+user:like:321:recommendation
+  "789" "2014-02-01 17:15:01 +01:00"
+
+recommendation:like:789:user
+  "123" "2012-11-13 00:01:02 +01:00"
+  "321" "2014-02-01 17:15:01 +01:00"
+
+recommendation:like:987:user
+  "123" "2011-02-01 00:03:01 +01:00"
 ```

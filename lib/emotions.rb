@@ -9,6 +9,7 @@ module Emotions
   end
 
   module StringExtensions
+
     def underscore(delimiter = ':')
       c = dup
       c.gsub!(/([a-z\d])([A-Z])/,'\1_\2')
@@ -16,74 +17,44 @@ module Emotions
       c.downcase!
       c
     end
+
+  end
+
+  module KeyBuilderExtensions
+
+    def generate_key(scope, id = nil)
+      cn = self.class.name.dup
+      cn.class.send(:include, StringExtensions)
+      [cn.underscore, scope, id].compact.join(':')
+    end
+
   end
 
   class KeyBuilder
-    attr_reader :object, :target
-    private :object, :target
-    def initialize(object, extras = {})
-      raise ArgumentError, "Object must not be nil" if object.nil?
-      @object  = object
-      @emotion = extras.fetch(:emotion, nil)
-      @target  = extras.fetch(:target, nil)
-      if (@emotion and @target.nil?) or (@target and @emotion.nil?)
-        raise ArgumentError, "Cannot generate an emotion key without a target"  
-      end
+
+    def initialize(args)
+      @object  = args.fetch(:object)
+      @target  = args.fetch(:target, nil)
+      @emotion = args.fetch(:emotion)
     end
+
     def key
-      if target
-        [underscore_object_class_name, _object_id, emotion, 
-         underscore_target_class_name, target_id].compact.join(delimiter)
-      else
-        [underscore_object_class_name, _object_id].compact.join(delimiter)
+      object = @object.dup
+      object.class.send(:include, KeyBuilderExtensions)
+      key = object.generate_key(@emotion, object.id)
+      if @target
+        tcn = @target.class == Class ? @target.name.dup : @target.class.name.dup
+        tcn.class.send(:include, StringExtensions)
+        key += ":#{tcn.underscore}"
       end
+      key
     end
-    private
-      def emotion
-        @emotion ? @emotion.to_s : nil
-      end
-      def underscore_emotion
-        return nil unless emotion
-        e = emotion.dup
-        e.class.send(:include, StringExtensions)
-        e.underscore(delimiter)
-      end
-      def _object_id
-        object.id.to_s
-      end
-      def target_id
-        target ? target.id.to_s : nil
-      end
-      def object_class_name
-        object.class.name
-      end
-      def underscore_object_class_name
-        cn = object_class_name.dup
-        cn.class.send(:include, StringExtensions)
-        cn.underscore(delimiter)
-      end
-      def target_class_name
-        return nil unless target
-        target.class.name
-      end
-      def underscore_target_class_name
-        return nil unless target
-        cn = target_class_name.dup
-        cn.class.send(:include, StringExtensions)
-        cn.underscore(delimiter)
-      end
-      def delimiter
-        ':'
-      end
+
   end
 
   class RedisBackend
 
     attr_accessor :redis
-
-    def key_exists?(key_name)
-      redis.exists(key_name)
-    end
 
     def write_keys(key_hashes)
       redis.multi do
@@ -99,8 +70,20 @@ module Emotions
       end
     end
 
-    def read_key(key_name)
-      Hash[reids.hgetall(key_name)]
+    def read_sub_key(key_name, key)
+      redis.hget(key_name, key)
+    end
+
+    def remove_sub_keys(key_pairs)
+      redis.multi do
+        key_pairs.each do |key_name, key|
+          redis.hdel(key_name, key.to_s)
+        end
+      end
+    end
+
+    def keys_matching(argument)
+      redis.keys(argument)
     end
 
   end
@@ -115,21 +98,26 @@ module Emotions
 
     def persist(args = {time: Time.now})
       backend.write_keys({
-        target_key => {created_at: args.fetch(:time)},
-        object_key => {created_at: args.fetch(:time)},
+        target_key => {object.id => args.fetch(:time)},
+        object_key => {target.id => args.fetch(:time)},
       })
     end
 
+    def remove
+      backend.remove_sub_keys([[target_key, object.id.to_s], [object_key, target.id.to_s]])
+    end
+
     def object_key
-      KeyBuilder.new(object, emotion: emotion, target: target).key
+      KeyBuilder.new(object: object, emotion: emotion, target: target).key
     end
     
     def target_key
-      KeyBuilder.new(target, emotion: emotion, target: object).key
+      KeyBuilder.new(object: target, emotion: emotion, target: object).key
     end
 
     def exists?
-      backend.key_exists?(target_key)
+      puts "Checking if #{target_key} #{target.id} exists"
+      backend.read_sub_key(target_key, target.id.to_s)
     end
 
     private
@@ -144,8 +132,6 @@ module Emotions
 
     class << self
 
-      attr_accessor :_emotions
-
       def included(klass)
         klass.send(:include, InstanceMethods)
         klass.send(:extend,  ClassMethods)
@@ -155,15 +141,36 @@ module Emotions
 
     module ClassMethods
       def emotions(*emotions)
-        emotions.each { |emotion| emotion(emotion) }
+        emotions.each { |emotion| register_emotion(emotion.to_sym) }
       end
-      def emotion(name)
-
+      def register_emotion(name)
+        @registered_emotions ||= Array.new
+        @registered_emotions <<  name
+      end
+      def registered_emotions
+        @registered_emotions
       end
     end
   
     module InstanceMethods
 
+      def initialize(*args)
+        super
+        self.class.registered_emotions.each do |emotion|
+          self.class.send :define_method, :"#{emotion}_by" do |emotional|
+            Emotion.new(object: emotional, target: self, emotion: emotion).persist
+          end
+          self.class.send :define_method, :"cancel_#{emotion}_by" do |emotional|
+            e = Emotion.new(object: emotional, target: self, emotion: emotion)
+          end
+#         self.class.send :define_method, :"#{emotion}_emotes" do
+#           lookup_key_builder = KeyBuilder.new(object: self, emotion: emotion)
+#           keys = Emotions.backend.keys_matching(lookup_key_builder.key + "*")
+#           puts "REDIS HAS #{Emotions.backend.redis.get(keys)}"
+#         end
+        end
+      end
+  
     end
 
   end
