@@ -36,18 +36,16 @@ module Emotions
 
     def test_the_target_key_is_made_available_via_an_accessor
       example_object = ::ExampleObject.new
-      example_object.class.send(:define_method, :id, lambda { 123 })
       example_target = ::ExampleTarget.new
-      example_target.class.send(:define_method, :id, lambda { 456 })
+      example_target.id = 456
       emotion = Emotion.new(object: example_object, target: example_target, emotion: :example)
       assert_equal 'example_target:example:456:example_object', emotion.target_key
     end
 
     def test_the_object_key_is_made_available_via_an_accessor
       example_object = ::ExampleObject.new
-      example_object.class.send(:define_method, :id, lambda { 123 })
+      example_object.id = 123
       example_target = ::ExampleTarget.new
-      example_target.class.send(:define_method, :id, lambda { 456 })
       emotion = Emotion.new(object: example_object, target: example_target, emotion: :example)
       assert_equal 'example_object:example:123:example_target', emotion.object_key
     end

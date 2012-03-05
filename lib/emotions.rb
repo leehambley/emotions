@@ -60,7 +60,7 @@ module Emotions
       redis.multi do
         key_hashes.each do |key_name, hash|
           write_key(key_name, hash)
-        end  
+        end
       end
     end
 
@@ -93,39 +93,43 @@ module Emotions
     attr_accessor :target, :object, :emotion
 
     def initialize(args = {})
-      @target, @object, @emotion = args.fetch(:target), args.fetch(:object), args.fetch(:emotion)
+      @target, @object, @emotion =
+        args.fetch(:target), args.fetch(:object), args.fetch(:emotion)
     end
 
     def persist(args = {time: Time.now})
       backend.write_keys({
-        target_key => {object.id => args.fetch(:time)},
-        object_key => {target.id => args.fetch(:time)},
+        target_key => {object.id.to_s => args.fetch(:time)},
+        object_key => {target.id.to_s => args.fetch(:time)},
       })
-    end
-
-    def remove
-      backend.remove_sub_keys([[target_key, object.id.to_s], [object_key, target.id.to_s]])
     end
 
     def object_key
       KeyBuilder.new(object: object, emotion: emotion, target: target).key
     end
-    
+
     def target_key
       KeyBuilder.new(object: target, emotion: emotion, target: object).key
     end
 
     def exists?
-      puts "Checking if #{target_key} #{target.id} exists"
-      backend.read_sub_key(target_key, target.id.to_s)
+      tk = backend.read_sub_key(target_key, object.id.to_s)
+      ok = backend.read_sub_key(object_key, target.id.to_s)
+      tk && ok
     end
+
+    def remove
+      backend.remove_sub_keys([[target_key, object.id.to_s],
+                               [object_key, target.id.to_s]])
+    end
+
 
     private
 
       def backend
         Emotions.backend
       end
-    
+
   end
 
   module Emotive
@@ -151,17 +155,20 @@ module Emotions
         @registered_emotions
       end
     end
-  
+
     module InstanceMethods
 
       def initialize(*args)
         super
         self.class.registered_emotions.each do |emotion|
-          self.class.send :define_method, :"#{emotion}_by" do |emotional|
-            Emotion.new(object: emotional, target: self, emotion: emotion).persist
+          self.class.send :define_method, :"#{emotion}_by" do |*args|
+            emotional, time = *args
+            time  ||= Time.now.utc
+            e = Emotion.new(object: emotional, target: self, emotion: emotion)
+            true & e.persist(time: time)
           end
           self.class.send :define_method, :"cancel_#{emotion}_by" do |emotional|
-            e = Emotion.new(object: emotional, target: self, emotion: emotion)
+            Emotion.new(object: emotional, target: self, emotion: emotion).remove
           end
 #         self.class.send :define_method, :"#{emotion}_emotes" do
 #           lookup_key_builder = KeyBuilder.new(object: self, emotion: emotion)
@@ -170,7 +177,7 @@ module Emotions
 #         end
         end
       end
-  
+
     end
 
   end
@@ -185,7 +192,7 @@ module Emotions
     module ClassMethods
 
     end
-  
+
     module InstanceMethods
 
     end

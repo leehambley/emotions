@@ -1,16 +1,16 @@
 require 'test_helper'
 
 module Emotions
-  
+
   class IntegrationTestEmotionsEmotion < MiniTest::Integration::TestCase
 
     def test_emotions_do_not_exist_until_persisted
 
       example_object = ExampleObject.new
-      example_object.class.send(:define_method, :id, lambda { 123 })
+      example_object.id = 123
 
       example_target = ExampleTarget.new
-      example_target.class.send(:define_method, :id, lambda { 456 })
+      example_target.id = 456
 
       emotion = Emotion.new(object: example_object, target: example_target, emotion: :example)
 
@@ -21,10 +21,10 @@ module Emotions
     def test_emotions_exist_once_persisted
 
       example_object = ExampleObject.new
-      example_object.class.send(:define_method, :id, lambda { 123 })
+      example_object.id = 123
 
       example_target = ExampleTarget.new
-      example_target.class.send(:define_method, :id, lambda { 456 })
+      example_target.id = 456
 
       emotion_one = Emotion.new(object: example_object, target: example_target, emotion: :example)
 
@@ -37,10 +37,10 @@ module Emotions
     def test_emotions_that_are_the_same_can_be_treated_as_equal
 
       example_object = ExampleObject.new
-      example_object.class.send(:define_method, :id, lambda { 123 })
+      example_object.id = 123
 
       example_target = ExampleTarget.new
-      example_target.class.send(:define_method, :id, lambda { 456 })
+      example_target.id = 456
 
       emotion_one = Emotion.new(object: example_object, target: example_target, emotion: :example)
       emotion_two = Emotion.new(object: example_object, target: example_target, emotion: :example)
