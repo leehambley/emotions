@@ -46,8 +46,8 @@ module Emotions
       example_target.id = 456
 
       Emotions.backend = ::MiniTest::Mock.new
-      Emotions.backend.expect(:write_keys, true, [{ 'example_object:example_emotion:123:example_target' => {'456' => t},
-                                                    'example_target:example_emotion:456:example_object' => {'123' => t} }])
+      Emotions.backend.expect(:write_keys, true, [{ 'ExampleObject:example_emotion:123:ExampleTarget' => {'456' => t},
+                                                    'ExampleTarget:example_emotion:456:ExampleObject' => {'123' => t} }])
 
       assert_equal true, example_target.example_emotion_by(example_object, t)
 
@@ -69,7 +69,8 @@ module Emotions
       example_target.id = 456
 
       Emotions.backend = ::MiniTest::Mock.new
-      Emotions.backend.expect(:remove_sub_keys, true, [[["example_target:example_emotion:456:example_object", "123"], ["example_object:example_emotion:123:example_target", "456"]]])
+      Emotions.backend.expect(:remove_sub_keys, true, [[["ExampleTarget:example_emotion:456:ExampleObject", "123"],
+                                                        ["ExampleObject:example_emotion:123:ExampleTarget", "456"]]])
 
       assert_equal true, example_target.cancel_example_emotion_by(example_object)
 
@@ -77,8 +78,29 @@ module Emotions
 
     end
 
-    def test_something_about_retreiving_emotions
-      skip
+    def test_emotions_retrieved_from_the_backend_en_masse
+
+      t = Time.now
+
+      ExampleTarget.send(:include, Emotive)
+      ExampleTarget.send(:emotions, :example_emotion)
+
+      example_target = ExampleTarget.new
+      example_target.id = 456
+
+      example_object = ExampleObject.new
+      example_object.id = 123
+
+      Emotions.backend = ::MiniTest::Mock.new
+      Emotions.backend.expect(:keys_matching, ["ExampleTarget:example_emotion:456:ExampleObject"], ["ExampleTarget:example_emotion:456*"])
+      Emotions.backend.expect(:read_key, {"123" => t}, ["ExampleTarget:example_emotion:456:ExampleObject"])
+
+      expected_emotion = Emotion.new(target: example_target, object: example_object, emotion: :example_emotion)
+
+      assert_equal expected_emotion, example_target.example_emotion_emotes.first
+
+      Emotions.backend.verify
+
     end
 
   end

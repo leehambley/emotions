@@ -33,7 +33,7 @@ IntegrationTestRedis = DaemonController.new(
 module Emotions
 
   module MiniTest
-    
+
     class Unit
       TestCase = Class.new(::MiniTest::Unit::TestCase)
     end
@@ -54,10 +54,27 @@ Emotions::MiniTest::Unit::TestCase.class_eval do
 
   def setup_with_clean_objects
     setup_without_clean_objects
-    Object.const_set(:ExampleObject, Class.new)
+    instance_methods = Module.new do
+      def ==(other)
+        id == other.id
+      end
+      def initialize(id = nil)
+        @id = id
+      end
+    end
+    class_methods = Module.new do
+      def find(id)
+        new(id)
+      end
+    end
+    ::Object.const_set(:ExampleObject, Class.new)
+    ::Object.const_set(:ExampleTarget, Class.new)
     ::ExampleObject.class_eval { attr_accessor :id }
-    Object.const_set(:ExampleTarget, Class.new)
     ::ExampleTarget.class_eval { attr_accessor :id }
+    ::ExampleObject.send(:include, instance_methods)
+    ::ExampleTarget.send(:include, instance_methods)
+    ::ExampleObject.send(:extend, class_methods)
+    ::ExampleTarget.send(:extend, class_methods)
   end
   alias :setup_without_clean_objects :setup
   alias :setup :setup_with_clean_objects

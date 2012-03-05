@@ -8,24 +8,10 @@ module Emotions
     attr_accessor :backend
   end
 
-  module StringExtensions
-
-    def underscore(delimiter = ':')
-      c = dup
-      c.gsub!(/([a-z\d])([A-Z])/,'\1_\2')
-      c.gsub!(/\:\:/, delimiter)
-      c.downcase!
-      c
-    end
-
-  end
-
   module KeyBuilderExtensions
 
     def generate_key(scope, id = nil)
-      cn = self.class.name.dup
-      cn.class.send(:include, StringExtensions)
-      [cn.underscore, scope, id].compact.join(':')
+      [self.class.name, scope, id].compact.join(':')
     end
 
   end
@@ -43,9 +29,8 @@ module Emotions
       object.class.send(:include, KeyBuilderExtensions)
       key = object.generate_key(@emotion, object.id)
       if @target
-        tcn = @target.class == Class ? @target.name.dup : @target.class.name.dup
-        tcn.class.send(:include, StringExtensions)
-        key += ":#{tcn.underscore}"
+        tcn = @target.class == Class ? @target.name : @target.class.name
+        key += ":#{tcn}"
       end
       key
     end
@@ -69,6 +54,11 @@ module Emotions
         redis.hset key_name, hash_key, hash_value
       end
     end
+    private :write_key
+
+    def read_key(key_name)
+      redis.get(key_name)
+    end
 
     def read_sub_key(key_name, key)
       redis.hget(key_name, key)
@@ -88,13 +78,31 @@ module Emotions
 
   end
 
+  class KeyLoader
+
+    def initialize(key)
+      @object_class, @emotion, @object_id, @target_class = key.split(':')
+    end
+
+    def object
+      Object.const_get(@object_class).find(object_id)
+    end
+
+    private
+
+      def object_id
+        @object_id.to_i == @object_id ? @object_id : @object_id.to_i
+      end
+
+  end
+
   class Emotion
 
-    attr_accessor :target, :object, :emotion
+    attr_accessor :target, :object, :emotion, :created_at
 
     def initialize(args = {})
-      @target, @object, @emotion =
-        args.fetch(:target), args.fetch(:object), args.fetch(:emotion)
+      @target, @object, @emotion, @created_at =
+        args.fetch(:target), args.fetch(:object), args.fetch(:emotion), args.fetch(:created_at, nil)
     end
 
     def persist(args = {time: Time.now})
@@ -123,6 +131,12 @@ module Emotions
                                [object_key, target.id.to_s]])
     end
 
+    def ==(other_emotion)
+      emotion_equal  = self.emotion == other_emotion.emotion
+      emotion_target = self.target  == other_emotion.target
+      emotion_object = self.object  == other_emotion.object
+      emotion_equal && emotion_target && emotion_object
+    end
 
     private
 
@@ -170,11 +184,14 @@ module Emotions
           self.class.send :define_method, :"cancel_#{emotion}_by" do |emotional|
             Emotion.new(object: emotional, target: self, emotion: emotion).remove
           end
-#         self.class.send :define_method, :"#{emotion}_emotes" do
-#           lookup_key_builder = KeyBuilder.new(object: self, emotion: emotion)
-#           keys = Emotions.backend.keys_matching(lookup_key_builder.key + "*")
-#           puts "REDIS HAS #{Emotions.backend.redis.get(keys)}"
-#         end
+         self.class.send :define_method, :"#{emotion}_emotes" do
+           lookup_key_builder = KeyBuilder.new(object: self, emotion: emotion)
+           keys = Emotions.backend.keys_matching(lookup_key_builder.key + "*")
+           keys.collect do |key_name|
+             key_loader = KeyLoader.new(key_name)
+             Emotion.new(target: true, emotion: true, object: key_loader.object)
+           end
+         end
         end
       end
 
