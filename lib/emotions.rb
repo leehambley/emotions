@@ -80,19 +80,21 @@ module Emotions
 
   class KeyLoader
 
-    def initialize(key)
-      @object_class, @emotion, @object_id, @target_class = key.split(':')
+    attr_reader :key, :object, :target, :emotion
+
+    def initialize(key, id)
+      @key       = key
+      @target_id = id
+      @object_class, @emotion, @object_id, @target_class = @key.split(':')
     end
 
     def object
       Object.const_get(@object_class).find(object_id)
     end
 
-    private
-
-      def object_id
-        @object_id.to_i == @object_id ? @object_id : @object_id.to_i
-      end
+    def target
+      Object.const_get(@target_class).find(target_id)
+    end
 
   end
 
@@ -186,10 +188,14 @@ module Emotions
           end
          self.class.send :define_method, :"#{emotion}_emotes" do
            lookup_key_builder = KeyBuilder.new(object: self, emotion: emotion)
-           keys = Emotions.backend.keys_matching(lookup_key_builder.key + "*")
-           keys.collect do |key_name|
-             key_loader = KeyLoader.new(key_name)
-             Emotion.new(target: true, emotion: true, object: key_loader.object)
+           matching_keys = Emotions.backend.keys_matching(lookup_key_builder.key + "*")
+           puts lookup_key_builder.key + "*"
+           matching_keys.collect do |matching_key_name|
+             pairs = Emotions.backend.read_key(matching_key_name)
+             Hash[pairs].each do |id, time|
+               key_loader = KeyLoader.new(matching_key_name, id)
+               Emotion.new(target: key_loader.target, emotion: key_loader.emotion, object: key_loader.object, time: key_loader.time)
+             end
            end
          end
         end
